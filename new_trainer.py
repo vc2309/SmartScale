@@ -7,6 +7,18 @@ from PIL import Image
 import os
 import numpy as np
 from keras.preprocessing import image
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+import json
+def modelMaker(num_classes):
+    from keras.applications.inception_v3 import InceptionV3
+    conv_base = InceptionV3(weights='imagenet', include_top=False, input_shape=(150,150,3))
+    model = Sequential()
+    model.add(conv_base)
+    model.add(Flatten())
+    model.add(Dense(256, activation='relu'))
+    model.add(Dense(num_classes, activation='softmax'))
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics = ['accuracy'])
+    return model
 
 def makeModel(num_classes):
     classifier = Sequential()
@@ -38,7 +50,7 @@ def makeModel(num_classes):
     classifier.add(BatchNormalization())
     classifier.add(Dropout(0.5))
     
-    classifier.add(Dense(units=num_classes, activation="sigmoid"))
+    classifier.add(Dense(units=num_classes, activation="softmax"))
     classifier.compile(optimizer='adam', loss='categorical_crossentropy', metrics = ['accuracy'])
     return classifier
     
@@ -62,8 +74,13 @@ train_dir = 'images/train/'
 test_dir = 'images/test/'
 num_models = len(os.listdir('models/'))
 num_classes = len(os.listdir('images/train'))
-classifier = makeModel(num_classes)
+#classifier = modelMaker(num_classes)
+classifier = makeModel(9)
 trainSet, testSet = getDataset(classes=num_classes, train_source=train_dir, test_source=test_dir)
-
-classifier.fit_generator(trainSet,steps_per_epoch=8000,epochs=10, validation_data=testSet, validation_steps=800)
+with open("classes.txt","w+") as file:
+        file.write(json.dumps(trainSet.class_indices))
+es = EarlyStopping(monitor='val_acc', mode='max', min_delta=0.5)
+mc = ModelCheckpoint('best_model.h5', monitor='val_acc', mode='max', verbose=1, save_best_only=True)
+classifier.fit_generator(trainSet,steps_per_epoch=8000,epochs=10,
+        validation_data=testSet, validation_steps=800, callbacks=[mc])
 classifier.save('models/my_model{}.h5'.format(num_models))
